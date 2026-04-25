@@ -1,0 +1,34 @@
+# Environment Variables (API Keys, DB Credentials)
+.env
+
+# Python Virtual Environments
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env.bak/
+venv.bak/
+
+# Project Specific Output / Session files
+*.session
+test_scanner_output.txt
+
+# Personal Notes, Logs, and Plans
+dev-logs/
+mini-plans/
+*.md
+
+# Allow README.md if you decide to add one later
+!README.md
+
+# Gemini / IDE folders
+.gemini/
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db

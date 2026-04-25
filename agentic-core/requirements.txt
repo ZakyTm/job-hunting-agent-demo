@@ -1,0 +1,19 @@
+# agentic-core/requirements.txt
+# Core
+fastapi
+uvicorn
+pydantic
+
+# LangGraph + LLM
+langgraph
+langchain-core
+langchain-google-genai
+
+# Telegram
+telethon
+
+# HTTP client (for ingestion → API calls)
+httpx
+
+# Utilities
+python-dotenv

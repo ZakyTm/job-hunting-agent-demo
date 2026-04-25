@@ -1,0 +1,20 @@
+CREATE TABLE jobs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    source TEXT NOT NULL,
+    source_channel TEXT,
+    job_title TEXT,
+    company_name TEXT,
+    contact_email TEXT,
+    requirements JSONB,
+    match_score INT,
+    match_reasoning TEXT,
+    matched_skills JSONB,
+    missing_skills JSONB,
+    draft_email TEXT,
+    email_subject TEXT,
+    tailored_cv_path TEXT,
+    qa_prep TEXT,
+    status TEXT DEFAULT 'new',
+    raw_text TEXT
+);
