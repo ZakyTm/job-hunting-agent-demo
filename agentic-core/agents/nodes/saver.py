@@ -7,7 +7,10 @@ load_dotenv()
 
 # We need these to be set in .env
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+# Backend uses service_role to bypass RLS
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+# Fallback to anon key for backward compatibility
+SUPABASE_KEY = SUPABASE_SERVICE_KEY or os.environ.get("SUPABASE_KEY", "")
 
 # Webhook for n8n notifications
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/job-ready")
@@ -56,6 +59,7 @@ def saver_node(state: dict) -> dict:
                 "match_reasoning": state.get("match_reasoning"),
                 "matched_skills": state.get("matched_skills", []),
                 "missing_skills": state.get("missing_skills", []),
+                "reasoning_trace": state.get("reasoning_trace"),
                 "status": status,
                 "raw_text": state.get("raw_text")
             }

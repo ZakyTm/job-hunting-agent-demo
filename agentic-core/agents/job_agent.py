@@ -1,12 +1,13 @@
 # agentic-core/agents/job_agent.py
 """
-Job Agent — LangGraph StateGraph that wires Scanner → Matchmaker → routing.
-This is the brain of the pipeline.
+Job Agent — LangGraph 0.3 StateGraph with Command-based routing.
+Scanner → Matchmaker → (high: Tailor→Ghostwriter→Interviewer | medium/low: Saver)
 """
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
+from langgraph.types import Command
 from agents.nodes.scanner import scanner_node
-from agents.nodes.matchmaker import matchmaker_node
+from agents.nodes.matchmaker import matchmaker_node_v2
 from agents.nodes.saver import saver_node
 
 # ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ class JobState(TypedDict):
     match_reasoning: Optional[str]
     matched_skills: Optional[list[str]]
     missing_skills: Optional[list[str]]
+    reasoning_trace: Optional[str]      # NEW: Gemini chain-of-thought
 
     # --- After Tailor (future) ---
     tailored_cv_path: Optional[str]
@@ -50,25 +52,6 @@ class JobState(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Routing function — decides what happens after Matchmaker scores the job
-# ---------------------------------------------------------------------------
-def route_by_score(state: dict) -> str:
-    """
-    Route based on match score:
-      7+ → high  (future: tailor → ghostwriter → interviewer → saver)
-      5-6 → medium (save as "maybe")
-      1-4 → low  (save as "ignored")
-    """
-    score = state.get("match_score", 0)
-    if score >= 7:
-        return "high"
-    elif score >= 5:
-        return "medium"
-    else:
-        return "low"
-
-
-# ---------------------------------------------------------------------------
 # Build the graph
 # ---------------------------------------------------------------------------
 def build_job_agent():
@@ -77,7 +60,7 @@ def build_job_agent():
 
     # Add nodes
     graph.add_node("scanner", scanner_node)
-    graph.add_node("matchmaker", matchmaker_node)
+    graph.add_node("matchmaker", matchmaker_node_v2) # Returns Command
     graph.add_node("saver", saver_node)
 
     # Set entry point
@@ -86,13 +69,8 @@ def build_job_agent():
     # Scanner always flows to Matchmaker
     graph.add_edge("scanner", "matchmaker")
 
-    # Matchmaker routes based on score
-    # For now all routes go to saver. In Mini-Plan 05, "high" will route to "tailor" instead.
-    graph.add_conditional_edges("matchmaker", route_by_score, {
-        "high":   "saver",    # Future: → tailor → ghostwriter → interviewer → saver
-        "medium": "saver",
-        "low":    "saver",
-    })
+    # Matchmaker now returns Command — no conditional_edges needed!
+    # The matchmaker_node_v2 itself decides where to route.
 
     # Saver is the terminal node
     graph.add_edge("saver", END)

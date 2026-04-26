@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.types import Command
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -130,3 +131,26 @@ Evaluate the match. Be honest and specific in your reasoning."""
             "matched_skills": [],
             "missing_skills": [],
         }
+
+
+def matchmaker_node_v2(state: dict) -> Command:
+    """
+    LangGraph 0.3 Command-based Matchmaker.
+    Scores the job AND decides routing in one step.
+    """
+    # Reuse existing scoring logic
+    result_dict = matchmaker_node(state)
+    score = result_dict.get("match_score", 0)
+
+    # Determine status + next node
+    if score >= 7:
+        result_dict["status"] = "ready"
+        next_node = "saver"       # Change to "tailor" in Mini-Plan 05
+    elif score >= 5:
+        result_dict["status"] = "maybe"
+        next_node = "saver"
+    else:
+        result_dict["status"] = "ignored"
+        next_node = "saver"
+
+    return Command(update=result_dict, goto=next_node)
