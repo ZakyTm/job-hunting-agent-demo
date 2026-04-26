@@ -3,10 +3,13 @@
 FastAPI entry point for the Job Hunting Agent.
 Receives raw job posts and runs them through the LangGraph pipeline.
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from agents.job_agent import agent
+import subprocess
+import os
+import sys
 
 app = FastAPI(
     title="Job Hunting Agent API",
@@ -50,6 +53,24 @@ async def process_job(data: JobInput):
         "source_channel": data.source_channel,
     })
     return JobOutput(**result)
+
+
+@app.post("/trigger-ingestion")
+def trigger_ingestion(background_tasks: BackgroundTasks):
+    """
+    Called by n8n to start the Telegram ingestion script.
+    Runs it in the background so n8n gets an immediate 200 OK.
+    """
+    def run_scraper():
+        print("\n🚀 Starting background ingestion via n8n trigger...")
+        # Make sure to run it from the agentic-core directory context
+        subprocess.Popen(
+            [sys.executable, "ingest/ingest_telegram.py", "--mode=api", "--limit=20"],
+            cwd=os.path.dirname(__file__)
+        )
+        
+    background_tasks.add_task(run_scraper)
+    return {"status": "Ingestion started in the background"}
 
 
 @app.get("/")
