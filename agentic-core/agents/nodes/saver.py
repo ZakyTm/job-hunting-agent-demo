@@ -11,6 +11,8 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 # Fallback to anon key for backward compatibility
 SUPABASE_KEY = SUPABASE_SERVICE_KEY or os.environ.get("SUPABASE_KEY", "")
+# The user's UUID so they own the jobs
+SUPABASE_USER_ID = os.environ.get("SUPABASE_USER_ID", None)
 
 # Webhook for n8n notifications
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/job-ready")
@@ -63,6 +65,8 @@ def saver_node(state: dict) -> dict:
                 "status": status,
                 "raw_text": state.get("raw_text")
             }
+            if SUPABASE_USER_ID:
+                job_data["user_id"] = SUPABASE_USER_ID
             
             response = requests.post(url, headers=headers, json=job_data)
             
