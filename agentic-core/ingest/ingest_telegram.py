@@ -74,10 +74,13 @@ async def send_to_pipeline(raw_text: str, channel: str) -> dict | None:
             return None
 
 
-async def main(mode: str = "print", limit: int = 10):
+async def main(mode: str = "print", limit: int = 50, days: int = 7):
     client = TelegramClient("job_agent_session", api_id, api_hash)
     await client.start(phone=phone_number)
-    print("✅ Connected to Telegram!\n")
+    print(f"✅ Connected to Telegram! (Scanning last {days} days)\n")
+
+    from datetime import datetime, timedelta, timezone
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     total_found = 0
     total_high = 0
@@ -89,10 +92,16 @@ async def main(mode: str = "print", limit: int = 10):
 
         try:
             entity = await client.get_entity(channel)
+            # Fetch a larger batch but stop when we hit the date limit
             messages = await client.get_messages(entity, limit=limit)
 
             job_count = 0
             for msg in messages:
+                # Stop if message is older than cutoff
+                if msg.date < cutoff_date:
+                    print(f"   ⏱️ Reached date limit ({msg.date.date()}). Stopping channel.")
+                    break
+
                 if msg.text:
                     text_lower = msg.text.lower()
                     if any(kw.lower() in text_lower for kw in JOB_KEYWORDS):
@@ -100,20 +109,22 @@ async def main(mode: str = "print", limit: int = 10):
                         total_found += 1
 
                         if mode == "print":
-                            # Just print (testing mode)
                             print(f"\n🟢 JOB POST FOUND (msg #{msg.id}):")
                             print(f"   Date: {msg.date}")
                             print(f"   Preview: {msg.text[:200]}...")
                             print()
 
                         elif mode == "api":
-                            # Send to pipeline
-                            print(f"\n📤 Sending msg #{msg.id} to pipeline...")
+                            print(f"\n📤 Sending msg #{msg.id} ({msg.date.date()}) to pipeline...")
                             result = await send_to_pipeline(msg.text, channel)
                             if result:
+                                status = result.get("status", "processed")
+                                if status == "skipped":
+                                    print(f"   ⏭️ Already processed. Skipping LLM.")
+                                    continue
+
                                 score = result.get("match_score", 0)
                                 title = result.get("job_title", "?")
-                                status = result.get("status", "?")
 
                                 if score >= 6:
                                     emoji = "🟢"
@@ -123,11 +134,11 @@ async def main(mode: str = "print", limit: int = 10):
                                 else:
                                     emoji = "🔴"
 
-                                print(f"   {emoji} {title} → {score}/10 [{status}]")
+                                print(f"   {emoji} {title} → {score}/10")
                                 print(f"   Email: {result.get('contact_email', 'N/A')}")
 
             if job_count == 0:
-                print("   ⚪ No job-related messages in last posts")
+                print("   ⚪ No new job-related messages in this window")
 
         except Exception as e:
             print(f"   ❌ Error reading {channel}: {e}")
@@ -136,7 +147,7 @@ async def main(mode: str = "print", limit: int = 10):
 
     # Summary
     print(f"\n{'='*60}")
-    print(f"📊 SUMMARY: {total_found} job posts found")
+    print(f"📊 SUMMARY: {total_found} posts analyzed in last {days} days")
     if mode == "api":
         print(f"   🟢 High matches (6+): {total_high}")
     print(f"{'='*60}")
@@ -146,8 +157,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Telegram Job Ingestion")
     parser.add_argument("--mode", choices=["print", "api"], default="print",
                         help="'print' to just display, 'api' to send to FastAPI pipeline")
-    parser.add_argument("--limit", type=int, default=10,
-                        help="Number of messages to fetch per channel (default: 10)")
+    parser.add_argument("--limit", type=int, default=50,
+                        help="Number of messages to fetch per channel (default: 50)")
+    parser.add_argument("--days", type=int, default=7,
+                        help="Only scan messages from the last X days (default: 7)")
     args = parser.parse_args()
 
-    asyncio.run(main(mode=args.mode, limit=args.limit))
+    asyncio.run(main(mode=args.mode, limit=args.limit, days=args.days))

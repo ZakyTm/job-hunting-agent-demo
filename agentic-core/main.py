@@ -18,6 +18,14 @@ app = FastAPI(
 )
 
 
+from supabase import create_client, Client
+
+# Initialize Supabase for duplicate checks
+URL = os.getenv("SUPABASE_URL")
+KEY = os.getenv("SUPABASE_SERVICE_KEY")
+supabase: Client = create_client(URL, KEY)
+
+
 class JobInput(BaseModel):
     """Payload from ingestion scripts (Telegram, Emplotic, etc.)."""
     raw_text: str
@@ -37,7 +45,7 @@ class JobOutput(BaseModel):
     match_reasoning: Optional[str] = None
     matched_skills: Optional[list[str]] = None
     missing_skills: Optional[list[str]] = None
-    status: Optional[str] = None
+    status: Optional[str] = "processed"
 
 
 @app.post("/process-job", response_model=JobOutput)
@@ -45,8 +53,17 @@ async def process_job(data: JobInput):
     """
     Main endpoint: receives a raw job post, runs it through
     Scanner → Matchmaker → routing → saver.
-    Returns the full structured result.
     """
+    # --- SMART SKIP: Check if already in Supabase ---
+    try:
+        # Check for duplicate raw_text
+        existing = supabase.table("jobs").select("id").eq("raw_text", data.raw_text).execute()
+        if existing.data and len(existing.data) > 0:
+            return JobOutput(status="skipped")
+    except Exception as e:
+        print(f"⚠️ Duplicate check failed (ignoring): {e}")
+
+    # --- RUN PIPELINE ---
     result = agent.invoke({
         "raw_text": data.raw_text,
         "source": data.source,
@@ -59,18 +76,17 @@ async def process_job(data: JobInput):
 def trigger_ingestion(background_tasks: BackgroundTasks):
     """
     Called by n8n to start the Telegram ingestion script.
-    Runs it in the background so n8n gets an immediate 200 OK.
     """
     def run_scraper():
         print("\n🚀 Starting background ingestion via n8n trigger...")
-        # Make sure to run it from the agentic-core directory context
+        # Use the new --days=7 and --limit=50 flags
         subprocess.Popen(
-            [sys.executable, "ingest/ingest_telegram.py", "--mode=api", "--limit=20"],
+            [sys.executable, "ingest/ingest_telegram.py", "--mode=api", "--limit=100", "--days=7"],
             cwd=os.path.dirname(__file__)
         )
         
     background_tasks.add_task(run_scraper)
-    return {"status": "Ingestion started in the background"}
+    return {"status": "ok"}
 
 
 @app.get("/")
