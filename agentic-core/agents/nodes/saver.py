@@ -3,6 +3,10 @@ import os
 import requests
 from dotenv import load_dotenv
 
+from core.logging import get_logger
+
+log = get_logger(__name__)
+
 load_dotenv()
 
 # We need these to be set in .env
@@ -46,9 +50,13 @@ def saver_node(state: dict) -> dict:
         
     state["status"] = status
     
-    print(f"\n--- Saving job to Supabase ---")
-    print(f"Title: {state.get('job_title')}")
-    print(f"Score: {score}/10 -> {status.upper()}")
+    log.info("Saving job to Supabase", extra={
+        "pipeline_step": "saver",
+        "job_id": state.get("job_id"),
+        "job_title": state.get("job_title"),
+        "score": score,
+        "status": status
+    })
     
     # 1. Save to Supabase (using standard REST API to avoid package build errors)
     if SUPABASE_URL and SUPABASE_KEY:
@@ -73,6 +81,8 @@ def saver_node(state: dict) -> dict:
                 "matched_skills": state.get("matched_skills", []),
                 "missing_skills": state.get("missing_skills", []),
                 "reasoning_trace": state.get("reasoning_trace"),
+                "company_intel": state.get("company_intel"),
+                "source_message_id": state.get("source_message_id"),
                 "status": status,
                 "raw_text": state.get("raw_text")
             }
@@ -83,19 +93,19 @@ def saver_node(state: dict) -> dict:
             
             if response.ok and response.json():
                 state["job_id"] = response.json()[0].get("id")
-                print(f"✅ Saved to Supabase! ID: {state['job_id']}")
+                log.info("Saved to Supabase", extra={"job_id": state["job_id"], "pipeline_step": "saver"})
             else:
-                print(f"⚠️ Failed to save to Supabase: {response.status_code} {response.text}")
+                log.error("Failed to save to Supabase", extra={"status_code": response.status_code, "text": response.text, "pipeline_step": "saver"})
         except Exception as e:
-            print(f"❌ Supabase error: {e}")
+            log.error("Supabase error", extra={"pipeline_step": "saver"}, exc_info=True)
     else:
-        print("⚠️ Skipped Supabase insert (missing credentials in .env)")
+        log.warning("Skipped Supabase insert (missing credentials in .env)", extra={"pipeline_step": "saver"})
 
     # 2. Trigger n8n webhook for high matches
     if status == "ready":
         try:
             target_url = get_n8n_url(N8N_BASE_WEBHOOK_URL, N8N_MODE)
-            print(f"🔔 Triggering n8n notification ({N8N_MODE.upper()}) at: {target_url}")
+            log.info("Triggering n8n notification", extra={"url": target_url, "mode": N8N_MODE, "pipeline_step": "saver"})
             
             payload = {
                 "job_title": state.get("job_title"),
@@ -105,10 +115,10 @@ def saver_node(state: dict) -> dict:
             }
             res = requests.post(target_url, json=payload, timeout=5)
             if res.ok:
-                print(f"✅ Notification webhook triggered")
+                log.info("Notification webhook triggered", extra={"pipeline_step": "saver"})
             else:
-                print(f"⚠️ Webhook failed with status: {res.status_code}")
+                log.warning("Webhook failed", extra={"status_code": res.status_code, "pipeline_step": "saver"})
         except Exception as e:
-            print(f"❌ Webhook error: {e}")
+            log.error("Webhook error", extra={"pipeline_step": "saver"}, exc_info=True)
 
     return state

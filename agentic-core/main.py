@@ -11,6 +11,10 @@ import subprocess
 import os
 import sys
 
+from core.logging import get_logger
+
+log = get_logger(__name__)
+
 app = FastAPI(
     title="Job Hunting Agent API",
     description="AI-powered job matching pipeline: Scanner → Matchmaker → routing",
@@ -31,6 +35,7 @@ class JobInput(BaseModel):
     raw_text: str
     source: str = "telegram"
     source_channel: str = "unknown"
+    source_message_id: Optional[int] = None
 
 
 class JobOutput(BaseModel):
@@ -59,15 +64,17 @@ async def process_job(data: JobInput):
         # Check for duplicate raw_text
         existing = supabase.table("jobs").select("id").eq("raw_text", data.raw_text).execute()
         if existing.data and len(existing.data) > 0:
+            log.info("Duplicate job skipped", extra={"reason": "raw_text_match"})
             return JobOutput(status="skipped")
     except Exception as e:
-        print(f"⚠️ Duplicate check failed (ignoring): {e}")
+        log.error("Duplicate check failed (ignoring)", exc_info=True)
 
     # --- RUN PIPELINE ---
     result = agent.invoke({
         "raw_text": data.raw_text,
         "source": data.source,
         "source_channel": data.source_channel,
+        "source_message_id": data.source_message_id,
     })
     return JobOutput(**result)
 
@@ -104,4 +111,15 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "pipeline_nodes": ["scanner", "matchmaker", "saver"]}
+    return {"status": "healthy", "pipeline_nodes": ["scanner", "matchmaker", "researcher", "saver"]}
+
+@app.get("/processed-ids")
+def get_processed_ids(source_channel: str):
+    """Returns a list of source_message_ids already processed for a channel."""
+    try:
+        response = supabase.table("jobs").select("source_message_id").eq("source_channel", source_channel).execute()
+        ids = [row["source_message_id"] for row in response.data if row.get("source_message_id") is not None]
+        return {"processed_ids": ids}
+    except Exception as e:
+        log.error("Failed to fetch processed ids", exc_info=True)
+        return {"processed_ids": []}

@@ -16,6 +16,10 @@ import argparse
 from dotenv import load_dotenv
 from telethon import TelegramClient
 
+from core.logging import get_logger
+
+log = get_logger(__name__)
+
 # For API mode: POST to FastAPI
 try:
     import httpx
@@ -46,7 +50,7 @@ JOB_KEYWORDS = [
 ]
 
 
-async def send_to_pipeline(raw_text: str, channel: str) -> dict | None:
+async def send_to_pipeline(raw_text: str, channel: str, msg_id: int) -> dict | None:
     """POST a job post to the FastAPI pipeline and return the result."""
     if not HAS_HTTPX:
         print("  ⚠️ httpx not installed. Run: pip install httpx")
@@ -56,6 +60,7 @@ async def send_to_pipeline(raw_text: str, channel: str) -> dict | None:
         "raw_text": raw_text,
         "source": "telegram",
         "source_channel": channel,
+        "source_message_id": msg_id,
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -90,6 +95,18 @@ async def main(mode: str = "print", limit: int = 50, days: int = 7):
         print(f"📢 Channel: {channel}")
         print(f"{'='*60}")
 
+        # Fetch processed IDs for deduplication
+        processed_ids = set()
+        if HAS_HTTPX and mode == "api":
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(f"{FASTAPI_URL.replace('/process-job', '/processed-ids')}?source_channel={channel}")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        processed_ids = set(data.get("processed_ids", []))
+            except Exception as e:
+                log.error("Failed to fetch processed IDs", extra={"channel": channel}, exc_info=True)
+
         try:
             entity = await client.get_entity(channel)
             # Fetch a larger batch but stop when we hit the date limit
@@ -101,6 +118,14 @@ async def main(mode: str = "print", limit: int = 50, days: int = 7):
                 if msg.date < cutoff_date:
                     print(f"   ⏱️ Reached date limit ({msg.date.date()}). Stopping channel.")
                     break
+
+                if msg.id in processed_ids:
+                    log.info("Skipping already processed message", extra={
+                        "pipeline_step": "ingestion_dedup",
+                        "source_message_id": msg.id,
+                        "channel": channel
+                    })
+                    continue
 
                 if msg.text:
                     text_lower = msg.text.lower()
@@ -116,7 +141,7 @@ async def main(mode: str = "print", limit: int = 50, days: int = 7):
 
                         elif mode == "api":
                             print(f"\n📤 Sending msg #{msg.id} ({msg.date.date()}) to pipeline...")
-                            result = await send_to_pipeline(msg.text, channel)
+                            result = await send_to_pipeline(msg.text, channel, msg.id)
                             if result:
                                 status = result.get("status", "processed")
                                 if status == "skipped":
