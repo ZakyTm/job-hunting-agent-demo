@@ -11,6 +11,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.types import Command
 from dotenv import load_dotenv
 
+from core.logging import get_logger
+from core.llm_client import with_gemini_backoff
+
+log = get_logger(__name__)
+
 load_dotenv()
 
 # ---------------------------------------------------------------------------
@@ -68,6 +73,11 @@ def _build_calibration_block() -> str:
         lines.append(f"Score: {ex['score']}/10")
         lines.append(f"Reasoning: {ex['reasoning']}\n")
     return "\n".join(lines)
+
+
+@with_gemini_backoff()
+def _invoke_matchmaker_llm(structured_llm, prompt: str) -> MatchResult:
+    return structured_llm.invoke(prompt)
 
 
 def matchmaker_node(state: dict) -> dict:
@@ -134,7 +144,7 @@ CANDIDATE CV:
 Evaluate the match. Be honest and specific in your reasoning."""
 
     try:
-        result: MatchResult = structured_llm.invoke(prompt)
+        result: MatchResult = _invoke_matchmaker_llm(structured_llm, prompt)
         return {
             "match_score": result.match_score,
             "match_reasoning": result.match_reasoning,
@@ -142,7 +152,7 @@ Evaluate the match. Be honest and specific in your reasoning."""
             "missing_skills": result.missing_skills,
         }
     except Exception as e:
-        print(f"⚠️ Matchmaker failed: {e}")
+        log.error("Matchmaker failed", extra={"pipeline_step": "matchmaker", "job_id": state.get("job_id")}, exc_info=True)
         return {
             "match_score": 0,
             "match_reasoning": f"Matchmaker error: {str(e)}",
@@ -163,7 +173,7 @@ def matchmaker_node_v2(state: dict) -> Command:
     # Determine status + next node
     if score >= 7:
         result_dict["status"] = "ready"
-        next_node = "saver"       # Change to "tailor" in Mini-Plan 05
+        next_node = "researcher"
     elif score >= 5:
         result_dict["status"] = "maybe"
         next_node = "saver"

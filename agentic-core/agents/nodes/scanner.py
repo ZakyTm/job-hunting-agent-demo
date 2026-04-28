@@ -4,6 +4,11 @@ from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 
+from core.logging import get_logger
+from core.llm_client import with_gemini_backoff
+
+log = get_logger(__name__)
+
 load_dotenv()
 
 
@@ -22,6 +27,11 @@ def extract_emails(text: str) -> list[str]:
     """Regex-first email extraction (cheaper than LLM)."""
     pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
     return re.findall(pattern, text)
+
+
+@with_gemini_backoff()
+def _invoke_scanner_llm(structured_llm, prompt: str) -> ScannedJob:
+    return structured_llm.invoke(prompt)
 
 
 def scanner_node(state: dict) -> dict:
@@ -53,7 +63,7 @@ Job posting:
 ---"""
 
     try:
-        result: ScannedJob = structured_llm.invoke(prompt)
+        result: ScannedJob = _invoke_scanner_llm(structured_llm, prompt)
         return {
             "job_title": result.job_title,
             "company_name": result.company_name,
@@ -64,7 +74,7 @@ Job posting:
             "application_url": result.application_url,
         }
     except Exception as e:
-        print(f"⚠️ Scanner failed: {e}")
+        log.error("Scanner failed", extra={"pipeline_step": "scanner"}, exc_info=True)
         # Return what we can from regex at least
         return {
             "job_title": "PARSE_FAILED",

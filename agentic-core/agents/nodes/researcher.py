@@ -3,6 +3,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
+from core.logging import get_logger
+from core.llm_client import with_gemini_backoff
+
+log = get_logger(__name__)
+
 load_dotenv()
 
 class CompanyIntel(BaseModel):
@@ -11,6 +16,11 @@ class CompanyIntel(BaseModel):
     tech_stack: list[str] = Field(description="Key technologies or frameworks they use")
     recent_news: str | None = Field(description="Recent funding, product launches, or news")
     talking_point: str = Field(description="A specific insight to mention in a cover letter")
+
+def _invoke_researcher_llm(structured_llm, prompt: str) -> CompanyIntel:
+    return structured_llm.invoke(prompt)
+
+_invoke_researcher_llm = with_gemini_backoff()(_invoke_researcher_llm)
 
 def researcher_node(state: dict) -> dict:
     """
@@ -23,7 +33,7 @@ def researcher_node(state: dict) -> dict:
     if score < 5 or company == "Unknown":
         return {"company_intel": None}
 
-    print(f"🔍 Researching company: {company}...")
+    log.info("Researching company", extra={"company": company, "pipeline_step": "researcher", "job_id": state.get("job_id")})
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
@@ -43,8 +53,8 @@ If you can't find specific info, use your internal knowledge to provide a highly
 """
 
     try:
-        intel = structured_llm.invoke(prompt)
+        intel = _invoke_researcher_llm(structured_llm, prompt)
         return {"company_intel": intel.dict()}
     except Exception as e:
-        print(f"⚠️ Research failed: {e}")
+        log.error("Research failed", extra={"company": company, "pipeline_step": "researcher", "job_id": state.get("job_id")}, exc_info=True)
         return {"company_intel": None}
