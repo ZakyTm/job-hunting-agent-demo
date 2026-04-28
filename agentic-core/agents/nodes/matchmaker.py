@@ -53,9 +53,23 @@ class MatchResult(BaseModel):
     )
 
 
+from agents.nodes.scoring_examples import CALIBRATION_EXAMPLES
+
 # ---------------------------------------------------------------------------
 # The node function — LangGraph compatible
 # ---------------------------------------------------------------------------
+def _build_calibration_block() -> str:
+    """Formats calibration examples into a string for the prompt."""
+    lines = ["CALIBRATION EXAMPLES (How you should score past jobs):\n"]
+    for ex in CALIBRATION_EXAMPLES:
+        lines.append(f"Requirements: {ex['requirements']}")
+        lines.append(f"Matched: {ex['matched_skills']}")
+        lines.append(f"Missing: {ex['missing_skills']}")
+        lines.append(f"Score: {ex['score']}/10")
+        lines.append(f"Reasoning: {ex['reasoning']}\n")
+    return "\n".join(lines)
+
+
 def matchmaker_node(state: dict) -> dict:
     """
     Compares job requirements against the user's CV.
@@ -63,6 +77,7 @@ def matchmaker_node(state: dict) -> dict:
     Writes to state: match_score, match_reasoning, matched_skills, missing_skills
     """
     resume_text = _load_resume()
+    calibration_block = _build_calibration_block()
 
     job_title = state.get("job_title", "Unknown")
     company_name = state.get("company_name", "Unknown")
@@ -82,6 +97,8 @@ def matchmaker_node(state: dict) -> dict:
 
     prompt = f"""You are a strict, honest job-match evaluator. Compare the CANDIDATE's CV against the JOB requirements and score how well they fit.
 
+{calibration_block}
+
 SCORING RULES (follow these exactly):
 - Score 8-10: Candidate meets 80%+ of requirements. Core skills match. Experience level fits.
 - Score 6-7: Candidate meets 50-80% of requirements. Has transferable skills. Could realistically get an interview.
@@ -90,6 +107,7 @@ SCORING RULES (follow these exactly):
 
 IMPORTANT GUIDELINES:
 - Be STRICT. Do not inflate scores to be nice.
+- Use the CALIBRATION EXAMPLES above to anchor your scores.
 - Consider TRANSFERABLE skills (e.g., FastAPI experience counts for "backend development").
 - Penalize hard requirements the candidate clearly lacks (e.g., "10 years Java" when they have 0).
 - If the job requires a specific location and the candidate is in Algeria, factor that in realistically.

@@ -8,6 +8,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.types import Command
 from agents.nodes.scanner import scanner_node
 from agents.nodes.matchmaker import matchmaker_node_v2
+from agents.nodes.researcher import researcher_node
 from agents.nodes.saver import saver_node
 
 # ---------------------------------------------------------------------------
@@ -35,6 +36,9 @@ class JobState(TypedDict):
     missing_skills: Optional[list[str]]
     reasoning_trace: Optional[str]      # NEW: Gemini chain-of-thought
 
+    # --- After Researcher ---
+    company_intel: Optional[dict]       # NEW: Added research data
+
     # --- After Tailor (future) ---
     tailored_cv_path: Optional[str]
     cv_changes: Optional[list[str]]
@@ -61,19 +65,16 @@ def build_job_agent():
     # Add nodes
     graph.add_node("scanner", scanner_node)
     graph.add_node("matchmaker", matchmaker_node_v2) # Returns Command
+    graph.add_node("researcher", researcher_node)
     graph.add_node("saver", saver_node)
 
     # Set entry point
     graph.set_entry_point("scanner")
 
-    # Scanner always flows to Matchmaker
+    # Flow
     graph.add_edge("scanner", "matchmaker")
-
-    # Matchmaker now returns Command — no conditional_edges needed!
-    # The matchmaker_node_v2 itself decides where to route.
-
-    # Saver is the terminal node
-    graph.add_edge("saver", END)
+    graph.add_edge("matchmaker", "researcher") # matchmaker_node_v2 returns Command, but we can also use edges if needed
+    graph.add_edge("researcher", "saver")
 
     return graph.compile()
 

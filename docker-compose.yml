@@ -1,7 +1,13 @@
+version: "3.9"
+
+networks:
+  agent-net:
+    driver: bridge
 
 services:
   n8n:
     image: n8nio/n8n:latest
+    container_name: n8n
     restart: always
     ports:
       - "5678:5678"
@@ -11,9 +17,29 @@ services:
       - N8N_PROTOCOL=http
       - NODE_ENV=production
       - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=UTC # Change this to your timezone if you prefer
+      - GENERIC_TIMEZONE=UTC
     volumes:
       - n8n_data:/home/node/.n8n
+    networks:
+      - agent-net
+
+  fastapi:
+    build: 
+      context: ./agentic-core
+      dockerfile: Dockerfile # You'll need to create this, or I can help
+    container_name: fastapi
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./agentic-core/.env
+    environment:
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook/job-ready
+      - N8N_MODE=prod
+    networks:
+      - agent-net
+    depends_on:
+      - n8n
 
 volumes:
   n8n_data:

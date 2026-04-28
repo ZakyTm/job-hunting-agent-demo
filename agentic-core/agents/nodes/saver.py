@@ -15,8 +15,19 @@ SUPABASE_KEY = SUPABASE_SERVICE_KEY or os.environ.get("SUPABASE_KEY", "")
 SUPABASE_USER_ID = os.environ.get("SUPABASE_USER_ID", None)
 
 # Webhook for n8n notifications
-N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/job-ready")
+# N8N_MODE can be 'prod' or 'test'. 
+# In 'test' mode, we use the /webhook-test/ path so you can see it in the n8n editor.
+N8N_MODE = os.environ.get("N8N_MODE", "prod").lower()
+N8N_BASE_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/job-ready")
 
+def get_n8n_url(url: str, mode: str) -> str:
+    """
+    Adjusts the n8n URL based on the mode.
+    n8n v2 uses /webhook-test/ for manual test executions.
+    """
+    if mode == "test" and "/webhook/" in url:
+        return url.replace("/webhook/", "/webhook-test/")
+    return url
 
 def saver_node(state: dict) -> dict:
     """
@@ -83,15 +94,16 @@ def saver_node(state: dict) -> dict:
     # 2. Trigger n8n webhook for high matches
     if status == "ready":
         try:
-            print(f"🔔 Triggering n8n notification webhook...")
-            # We send minimal data to n8n just to trigger the toast
+            target_url = get_n8n_url(N8N_BASE_WEBHOOK_URL, N8N_MODE)
+            print(f"🔔 Triggering n8n notification ({N8N_MODE.upper()}) at: {target_url}")
+            
             payload = {
                 "job_title": state.get("job_title"),
                 "company_name": state.get("company_name"),
                 "match_score": score,
                 "match_reasoning": state.get("match_reasoning")
             }
-            res = requests.post(N8N_WEBHOOK_URL, json=payload, timeout=5)
+            res = requests.post(target_url, json=payload, timeout=5)
             if res.ok:
                 print(f"✅ Notification webhook triggered")
             else:
