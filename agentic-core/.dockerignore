@@ -1,0 +1,56 @@
+# ── Python runtime artifacts ──
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# ── Virtual environment ──
+# This is the most common cause of Docker images being 500MB+ larger than they should be.
+# The venv is rebuilt inside the container by pip install -r requirements.txt.
+venv/
+.venv/
+env/
+ENV/
+
+# ── Secrets — NEVER bake these into an image ──
+.env
+.env.*
+!.env.example          # allow the example file through for documentation
+
+# ── Telegram session files ──
+# These are auth tokens equivalent to your logged-in Telegram account.
+# If baked into an image and pushed to a registry, your account is compromised.
+*.session
+*.session-journal
+
+# ── LangGraph / LangChain cache ──
+.langchain.db
+langchain_cache/
+
+# ── Resume files ──
+# These are private documents. Keep them out of any image you might push to a registry.
+resume/
+resume/output/
+
+# ── Dev tooling ──
+.git/
+.gitignore
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.log
+
+# ── Dev artifacts ──
+dev-logs/
+*.md                   # README, mini-plans etc — not needed at runtime
+!requirements.txt      # but DO include this one
+
+# ── OS junk ──
+.DS_Store
+Thumbs.db
