@@ -107,11 +107,21 @@ def saver_node(state: dict) -> dict:
             target_url = get_n8n_url(N8N_BASE_WEBHOOK_URL, N8N_MODE)
             log.info("Triggering n8n notification", extra={"url": target_url, "mode": N8N_MODE, "pipeline_step": "saver"})
             
+            # ── Phase 05: enrich payload with researcher + matchmaker data ──
+            company_intel = state.get("company_intel") or {}
             payload = {
-                "job_title": state.get("job_title"),
-                "company_name": state.get("company_name"),
-                "match_score": score,
-                "match_reasoning": state.get("match_reasoning")
+                "job_title":      state.get("job_title"),
+                "company_name":   state.get("company_name"),
+                "match_score":    score,
+                "match_reasoning": state.get("match_reasoning"),
+                "matched_skills": state.get("matched_skills", []),
+                "status":         status,
+                "company_intel": {
+                    "talking_point": company_intel.get("talking_point", ""),
+                    "tech_stack":    company_intel.get("tech_stack", []),
+                    "company_size":  company_intel.get("company_size", ""),
+                    "recent_news":   company_intel.get("recent_news", ""),
+                },
             }
             res = requests.post(target_url, json=payload, timeout=5)
             if res.ok:
