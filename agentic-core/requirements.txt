@@ -9,6 +9,8 @@ langgraph>=0.3.0
 langgraph-checkpoint-sqlite==3.0.1
 langchain-core>=1.2.22
 langchain-google-genai>=2.1.0
+google-api-core
+supabase
 
 # Telegram
 telethon
