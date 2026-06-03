@@ -5,53 +5,6 @@ networks:
     driver: bridge
 
 services:
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: n8n
-    restart: unless-stopped        # 'always' restarts even on docker stop — use unless-stopped
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_HOST=0.0.0.0           # FIX 1: was 'localhost' — containers couldn't reach n8n at all
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_ENV=production
-      - N8N_SECURE_COOKIE=false    # FIX 2: required when running HTTP (not HTTPS), prevents auth cookie issues
-      - GENERIC_TIMEZONE=UTC
-
-      # FIX 3: WEBHOOK_URL controls what base URL n8n embeds in its webhook addresses.
-      # 'http://n8n:5678/' uses the Docker service name — correct for FastAPI → n8n calls.
-      #
-      # ⚠️  HITL EXCEPTION: $execution.resumeUrl will also use this base.
-      # Telegram's servers are on the public internet and cannot reach 'http://n8n:5678'.
-      # For HITL (the Approve/Ignore buttons), you need a public URL here.
-      #
-      # Local dev   → install ngrok, run: ngrok http 5678
-      #               then set: WEBHOOK_URL=https://xxxx.ngrok-free.app
-      # VPS/prod    → set: WEBHOOK_URL=http://YOUR_SERVER_IP:5678
-      #               or with nginx: WEBHOOK_URL=https://agent.yourdomain.com
-      - WEBHOOK_URL=http://n8n:5678/   # Change to public URL when testing HITL
-
-      # Prevent execution history from filling the volume over time
-      - EXECUTIONS_DATA_PRUNE=true
-      - EXECUTIONS_DATA_MAX_AGE=720    # hours = 30 days
-
-    volumes:
-      - n8n_data:/home/node/.n8n
-    networks:
-      - agent-net
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
-      interval: 20s
-      timeout: 8s
-      retries: 5
-      start_period: 30s             # n8n takes ~15s to boot; give it time before first check
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   fastapi:
     build:
       context: ./agentic-core
@@ -63,14 +16,10 @@ services:
     env_file:
       - ./agentic-core/.env
     environment:
-      # These override or extend .env — Docker service names for internal routing
-      - N8N_WEBHOOK_URL=http://n8n:5678/webhook/job-ready
-      - N8N_MODE=prod
+      # Scheduling interval (hours) — how often to scrape Telegram channels
+      - SCRAPE_INTERVAL_HOURS=2
     networks:
       - agent-net
-    depends_on:
-      n8n:
-        condition: service_healthy   # FIX 4: wait for n8n to pass its healthcheck, not just start
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -82,6 +31,3 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-volumes:
-  n8n_data:

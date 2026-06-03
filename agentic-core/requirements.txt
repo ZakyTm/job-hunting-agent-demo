@@ -18,5 +18,11 @@ telethon
 # HTTP client (for ingestion → API calls)
 httpx
 
+# Scheduling (replaces n8n cron)
+apscheduler>=3.10.0
+
+# Telegram Bot (replaces n8n notifications + HITL)
+python-telegram-bot>=21.0
+
 # Utilities
 python-dotenv

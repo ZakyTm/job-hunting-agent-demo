@@ -29,11 +29,21 @@ class JobState(BaseModel):
     # Researcher outputs
     company_intel: Optional[dict] = None
 
-    # Generated outputs (Mini-Plan 05 / 06)
+    # Generated outputs (Mini-Plan 06)
     draft_email: Optional[str] = None
     email_subject: Optional[str] = None
     qa_prep: Optional[str] = None
     tailored_cv_path: Optional[str] = None
+
+    # Post-approval: Tailor outputs
+    tailored_cv_md: Optional[str] = None
+    tailored_cv_diff: Optional[dict] = None
+
+    # Post-approval: Interviewer outputs
+    technical_questions: list[str] = Field(default_factory=list)
+    behavioral_questions: list[str] = Field(default_factory=list)
+    questions_to_ask: list[str] = Field(default_factory=list)
+    skill_gap_answers: list[dict] = Field(default_factory=list)
 
     # Pipeline metadata
     status: str = "new"

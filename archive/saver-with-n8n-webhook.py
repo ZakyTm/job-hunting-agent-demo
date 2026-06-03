@@ -1,6 +1,5 @@
 # agentic-core/agents/nodes/saver.py
 import os
-import asyncio
 import requests
 from dotenv import load_dotenv
 
@@ -19,11 +18,25 @@ SUPABASE_KEY = SUPABASE_SERVICE_KEY or os.environ.get("SUPABASE_KEY", "")
 # The user's UUID so they own the jobs
 SUPABASE_USER_ID = os.environ.get("SUPABASE_USER_ID", None)
 
+# Webhook for n8n notifications
+# N8N_MODE can be 'prod' or 'test'. 
+# In 'test' mode, we use the /webhook-test/ path so you can see it in the n8n editor.
+N8N_MODE = os.environ.get("N8N_MODE", "prod").lower()
+N8N_BASE_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/job-ready")
+
+def get_n8n_url(url: str, mode: str) -> str:
+    """
+    Adjusts the n8n URL based on the mode.
+    n8n v2 uses /webhook-test/ for manual test executions.
+    """
+    if mode == "test" and "/webhook/" in url:
+        return url.replace("/webhook/", "/webhook-test/")
+    return url
 
 def saver_node(state) -> dict:
     """
     Saves the processed job to Supabase and determines status.
-    If match score >= 7, sends a Telegram notification with Approve/Ignore buttons.
+    If match score >= 7, triggers an n8n webhook for desktop notification.
     """
     state_dict = state.model_dump() if hasattr(state, "model_dump") else (state.dict() if hasattr(state, "dict") else state)
     score = state_dict.get("match_score", 0)
@@ -46,8 +59,7 @@ def saver_node(state) -> dict:
         "status": status
     })
     
-    # 1. Save to Supabase (using standard REST API)
-    saved_id = None
+    # 1. Save to Supabase (using standard REST API to avoid package build errors)
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             url = f"{SUPABASE_URL}/rest/v1/jobs"
@@ -91,41 +103,34 @@ def saver_node(state) -> dict:
     else:
         log.warning("Skipped Supabase insert (missing credentials in .env)", extra={"pipeline_step": "saver"})
 
-    # 2. Send Telegram notification for high matches (replaces n8n webhook)
-    if status == "ready" and saved_id:
+    # 2. Trigger n8n webhook for high matches
+    if status == "ready":
         try:
-            from core.telegram_bot import notify_new_match
-
-            notification_data = {
-                "job_id": saved_id,
-                "job_title": state_dict.get("job_title"),
-                "company_name": state_dict.get("company_name"),
-                "match_score": score,
+            target_url = get_n8n_url(N8N_BASE_WEBHOOK_URL, N8N_MODE)
+            log.info("Triggering n8n notification", extra={"url": target_url, "mode": N8N_MODE, "pipeline_step": "saver"})
+            
+            # ── Phase 05: enrich payload with researcher + matchmaker data ──
+            company_intel = state_dict.get("company_intel") or {}
+            payload = {
+                "job_title":      state_dict.get("job_title"),
+                "company_name":   state_dict.get("company_name"),
+                "match_score":    score,
                 "match_reasoning": state_dict.get("match_reasoning"),
                 "matched_skills": state_dict.get("matched_skills", []),
-                "contact_email": state_dict.get("contact_email"),
-                "company_intel": state_dict.get("company_intel"),
+                "status":         status,
+                "company_intel": {
+                    "talking_point": company_intel.get("talking_point", ""),
+                    "tech_stack":    company_intel.get("tech_stack", []),
+                    "company_size":  company_intel.get("company_size", ""),
+                    "recent_news":   company_intel.get("recent_news", ""),
+                },
             }
-
-            # Run async notification in sync context
-            loop = None
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop and loop.is_running():
-                # We're inside an async context — schedule as a task
-                asyncio.ensure_future(notify_new_match(notification_data))
+            res = requests.post(target_url, json=payload, timeout=5)
+            if res.ok:
+                log.info("Notification webhook triggered", extra={"pipeline_step": "saver"})
             else:
-                # We're in a sync context — create a new event loop
-                asyncio.run(notify_new_match(notification_data))
-
-            log.info("Telegram notification dispatched", extra={"pipeline_step": "saver", "job_id": saved_id})
-
+                log.warning("Webhook failed", extra={"status_code": res.status_code, "pipeline_step": "saver"})
         except Exception as e:
-            # Non-fatal: job is saved even if notification fails
-            log.error("Telegram notification failed (job still saved)", extra={"pipeline_step": "saver"}, exc_info=True)
+            log.error("Webhook error", extra={"pipeline_step": "saver"}, exc_info=True)
 
     return updates
-
