@@ -101,9 +101,8 @@ def matchmaker_node(state) -> dict:
     req_text = "\n".join(f"  - {r}" for r in requirements) if requirements else "  (none listed)"
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-1.5-flash",
         google_api_key=os.getenv("GOOGLE_API_KEY"),
-        model_kwargs={"thought_in_content": True}  # Added based on 25-04-26 research log for reasoning traces
     )
     structured_llm = llm.with_structured_output(MatchResult)
 

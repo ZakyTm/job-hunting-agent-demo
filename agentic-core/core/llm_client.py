@@ -30,7 +30,7 @@ def with_gemini_backoff(max_retries: int = 4, base_delay: float = 2.0):
 
 def get_gemini(temperature: float = 0.1) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-flash-latest",
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         temperature=temperature,
         request_timeout=30,

@@ -38,7 +38,7 @@ def researcher_node(state) -> dict:
     log.info("Researching company", extra={"company": company, "pipeline_step": "researcher", "job_id": state_dict.get("job_id")})
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-1.5-flash",
         google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
     
