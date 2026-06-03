@@ -80,7 +80,7 @@ def _invoke_matchmaker_llm(structured_llm, prompt: str) -> MatchResult:
     return structured_llm.invoke(prompt)
 
 
-def matchmaker_node(state: dict) -> dict:
+def matchmaker_node(state) -> dict:
     """
     Compares job requirements against the user's CV.
     Reads from state: job_title, company_name, requirements, job_type, location
@@ -89,11 +89,13 @@ def matchmaker_node(state: dict) -> dict:
     resume_text = _load_resume()
     calibration_block = _build_calibration_block()
 
-    job_title = state.get("job_title", "Unknown")
-    company_name = state.get("company_name", "Unknown")
-    requirements = state.get("requirements", [])
-    job_type = state.get("job_type", "unknown")
-    location = state.get("location", "Not specified")
+    state_dict = state.model_dump() if hasattr(state, "model_dump") else (state.dict() if hasattr(state, "dict") else state)
+
+    job_title = state_dict.get("job_title", "Unknown")
+    company_name = state_dict.get("company_name", "Unknown")
+    requirements = state_dict.get("requirements", [])
+    job_type = state_dict.get("job_type", "unknown")
+    location = state_dict.get("location", "Not specified")
 
     # Format requirements as a readable list
     req_text = "\n".join(f"  - {r}" for r in requirements) if requirements else "  (none listed)"
@@ -152,7 +154,7 @@ Evaluate the match. Be honest and specific in your reasoning."""
             "missing_skills": result.missing_skills,
         }
     except Exception as e:
-        log.error("Matchmaker failed", extra={"pipeline_step": "matchmaker", "job_id": state.get("job_id")}, exc_info=True)
+        log.error("Matchmaker failed", extra={"pipeline_step": "matchmaker", "job_id": state_dict.get("job_id")}, exc_info=True)
         return {
             "match_score": 0,
             "match_reasoning": f"Matchmaker error: {str(e)}",
@@ -161,7 +163,7 @@ Evaluate the match. Be honest and specific in your reasoning."""
         }
 
 
-def matchmaker_node_v2(state: dict) -> Command:
+def matchmaker_node_v2(state) -> Command:
     """
     LangGraph 0.3 Command-based Matchmaker.
     Scores the job AND decides routing in one step.

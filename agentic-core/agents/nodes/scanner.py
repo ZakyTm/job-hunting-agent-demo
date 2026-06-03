@@ -34,12 +34,13 @@ def _invoke_scanner_llm(structured_llm, prompt: str) -> ScannedJob:
     return structured_llm.invoke(prompt)
 
 
-def scanner_node(state: dict) -> dict:
+def scanner_node(state) -> dict:
     """
     Takes raw_text from state, returns structured job data.
     Uses regex for emails first, Gemini for everything else.
     """
-    raw_text = state["raw_text"]
+    state_dict = state.model_dump() if hasattr(state, "model_dump") else (state.dict() if hasattr(state, "dict") else state)
+    raw_text = state_dict.get("raw_text", "")
 
     # Step 1: Regex email extraction (fast, free)
     emails = extract_emails(raw_text)

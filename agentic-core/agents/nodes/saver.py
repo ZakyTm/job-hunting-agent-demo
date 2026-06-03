@@ -33,12 +33,13 @@ def get_n8n_url(url: str, mode: str) -> str:
         return url.replace("/webhook/", "/webhook-test/")
     return url
 
-def saver_node(state: dict) -> dict:
+def saver_node(state) -> dict:
     """
     Saves the processed job to Supabase and determines status.
     If match score >= 7, triggers an n8n webhook for desktop notification.
     """
-    score = state.get("match_score", 0)
+    state_dict = state.model_dump() if hasattr(state, "model_dump") else (state.dict() if hasattr(state, "dict") else state)
+    score = state_dict.get("match_score", 0)
     
     # Set status
     if score >= 7:
@@ -48,12 +49,12 @@ def saver_node(state: dict) -> dict:
     else:
         status = "ignored"
         
-    state["status"] = status
+    updates = {"status": status}
     
     log.info("Saving job to Supabase", extra={
         "pipeline_step": "saver",
-        "job_id": state.get("job_id"),
-        "job_title": state.get("job_title"),
+        "job_id": state_dict.get("job_id"),
+        "job_title": state_dict.get("job_title"),
         "score": score,
         "status": status
     })
@@ -70,21 +71,21 @@ def saver_node(state: dict) -> dict:
             }
             
             job_data = {
-                "source": state.get("source", "unknown"),
-                "source_channel": state.get("source_channel"),
-                "job_title": state.get("job_title"),
-                "company_name": state.get("company_name"),
-                "contact_email": state.get("contact_email"),
-                "requirements": state.get("requirements", []),
+                "source": state_dict.get("source", "unknown"),
+                "source_channel": state_dict.get("source_channel"),
+                "job_title": state_dict.get("job_title"),
+                "company_name": state_dict.get("company_name"),
+                "contact_email": state_dict.get("contact_email"),
+                "requirements": state_dict.get("requirements", []),
                 "match_score": score,
-                "match_reasoning": state.get("match_reasoning"),
-                "matched_skills": state.get("matched_skills", []),
-                "missing_skills": state.get("missing_skills", []),
-                "reasoning_trace": state.get("reasoning_trace"),
-                "company_intel": state.get("company_intel"),
-                "source_message_id": state.get("source_message_id"),
+                "match_reasoning": state_dict.get("match_reasoning"),
+                "matched_skills": state_dict.get("matched_skills", []),
+                "missing_skills": state_dict.get("missing_skills", []),
+                "reasoning_trace": state_dict.get("reasoning_trace"),
+                "company_intel": state_dict.get("company_intel"),
+                "source_message_id": state_dict.get("source_message_id"),
                 "status": status,
-                "raw_text": state.get("raw_text")
+                "raw_text": state_dict.get("raw_text")
             }
             if SUPABASE_USER_ID:
                 job_data["user_id"] = SUPABASE_USER_ID
@@ -92,8 +93,9 @@ def saver_node(state: dict) -> dict:
             response = requests.post(url, headers=headers, json=job_data)
             
             if response.ok and response.json():
-                state["job_id"] = response.json()[0].get("id")
-                log.info("Saved to Supabase", extra={"job_id": state["job_id"], "pipeline_step": "saver"})
+                saved_id = response.json()[0].get("id")
+                updates["job_id"] = saved_id
+                log.info("Saved to Supabase", extra={"job_id": saved_id, "pipeline_step": "saver"})
             else:
                 log.error("Failed to save to Supabase", extra={"status_code": response.status_code, "text": response.text, "pipeline_step": "saver"})
         except Exception as e:
@@ -108,13 +110,13 @@ def saver_node(state: dict) -> dict:
             log.info("Triggering n8n notification", extra={"url": target_url, "mode": N8N_MODE, "pipeline_step": "saver"})
             
             # ── Phase 05: enrich payload with researcher + matchmaker data ──
-            company_intel = state.get("company_intel") or {}
+            company_intel = state_dict.get("company_intel") or {}
             payload = {
-                "job_title":      state.get("job_title"),
-                "company_name":   state.get("company_name"),
+                "job_title":      state_dict.get("job_title"),
+                "company_name":   state_dict.get("company_name"),
                 "match_score":    score,
-                "match_reasoning": state.get("match_reasoning"),
-                "matched_skills": state.get("matched_skills", []),
+                "match_reasoning": state_dict.get("match_reasoning"),
+                "matched_skills": state_dict.get("matched_skills", []),
                 "status":         status,
                 "company_intel": {
                     "talking_point": company_intel.get("talking_point", ""),
@@ -131,4 +133,4 @@ def saver_node(state: dict) -> dict:
         except Exception as e:
             log.error("Webhook error", extra={"pipeline_step": "saver"}, exc_info=True)
 
-    return state
+    return updates

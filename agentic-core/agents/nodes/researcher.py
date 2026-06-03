@@ -22,18 +22,20 @@ def _invoke_researcher_llm(structured_llm, prompt: str) -> CompanyIntel:
 
 _invoke_researcher_llm = with_gemini_backoff()(_invoke_researcher_llm)
 
-def researcher_node(state: dict) -> dict:
+def researcher_node(state) -> dict:
     """
     Enriches the job data with company research using Gemini.
     Only runs if the match score is decent (>= 5).
     """
-    score = state.get("match_score", 0)
-    company = state.get("company_name", "Unknown")
+    state_dict = state.model_dump() if hasattr(state, "model_dump") else (state.dict() if hasattr(state, "dict") else state)
+    
+    score = state_dict.get("match_score", 0)
+    company = state_dict.get("company_name", "Unknown")
     
     if score < 5 or company == "Unknown":
         return {"company_intel": None}
 
-    log.info("Researching company", extra={"company": company, "pipeline_step": "researcher", "job_id": state.get("job_id")})
+    log.info("Researching company", extra={"company": company, "pipeline_step": "researcher", "job_id": state_dict.get("job_id")})
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
@@ -44,8 +46,8 @@ def researcher_node(state: dict) -> dict:
     structured_llm = llm.with_structured_output(CompanyIntel)
 
     prompt = f"""Research the company '{company}' for a job applicant.
-Role: {state.get('job_title')}
-Location: {state.get('location')}
+Role: {state_dict.get('job_title')}
+Location: {state_dict.get('location')}
 
 Find their primary tech stack, company size, and any major news from the last 6 months.
 Identify ONE high-value talking point the applicant can use to show they've done their research.
@@ -56,5 +58,5 @@ If you can't find specific info, use your internal knowledge to provide a highly
         intel = _invoke_researcher_llm(structured_llm, prompt)
         return {"company_intel": intel.dict()}
     except Exception as e:
-        log.error("Research failed", extra={"company": company, "pipeline_step": "researcher", "job_id": state.get("job_id")}, exc_info=True)
+        log.error("Research failed", extra={"company": company, "pipeline_step": "researcher", "job_id": state_dict.get("job_id")}, exc_info=True)
         return {"company_intel": None}
