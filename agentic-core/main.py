@@ -40,12 +40,32 @@ app = FastAPI(
 )
 
 
-from supabase import create_client, Client
+import requests as http_requests
 
-# Initialize Supabase for duplicate checks
-URL = os.getenv("SUPABASE_URL")
-KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(URL, KEY)
+# Supabase REST API config (no SDK needed — avoids pyiceberg build issues on Windows)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY", "")
+
+def _supabase_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _supabase_query(table: str, select: str = "*", filters: dict = None, limit: int = 50, order: str = None):
+    """Generic Supabase REST query helper."""
+    url = f"{SUPABASE_URL}/rest/v1/{table}?select={select}"
+    if filters:
+        for col, val in filters.items():
+            url += f"&{col}=eq.{val}"
+    if order:
+        url += f"&order={order}"
+    url += f"&limit={limit}"
+    resp = http_requests.get(url, headers=_supabase_headers())
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -85,8 +105,11 @@ async def process_job(data: JobInput):
     """
     # --- SMART SKIP: Check if already in Supabase ---
     try:
-        existing = supabase.table("jobs").select("id").eq("raw_text", data.raw_text).execute()
-        if existing.data and len(existing.data) > 0:
+        # Use REST API directly to check for existing raw_text
+        import urllib.parse
+        check_url = f"{SUPABASE_URL}/rest/v1/jobs?select=id&raw_text=eq.{urllib.parse.quote(data.raw_text[:200])}"
+        check_resp = http_requests.get(check_url, headers=_supabase_headers())
+        if check_resp.ok and check_resp.json():
             log.info("Duplicate job skipped", extra={"reason": "raw_text_match"})
             return JobOutput(status="skipped")
     except Exception as e:
@@ -163,13 +186,15 @@ def list_jobs(
 ):
     """List jobs from Supabase with optional filtering."""
     try:
-        query = supabase.table("jobs").select("*").order("created_at", desc=True).limit(limit)
+        url = f"{SUPABASE_URL}/rest/v1/jobs?select=*&order=created_at.desc&limit={limit}"
         if status:
-            query = query.eq("status", status)
+            url += f"&status=eq.{status}"
         if min_score:
-            query = query.gte("match_score", min_score)
-        response = query.execute()
-        return {"jobs": response.data, "count": len(response.data)}
+            url += f"&match_score=gte.{min_score}"
+        resp = http_requests.get(url, headers=_supabase_headers())
+        resp.raise_for_status()
+        data = resp.json()
+        return {"jobs": data, "count": len(data)}
     except Exception as e:
         log.error("Failed to list jobs", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch jobs")
@@ -227,8 +252,12 @@ def health_check():
 def get_processed_ids(source_channel: str):
     """Returns a list of source_message_ids already processed for a channel."""
     try:
-        response = supabase.table("jobs").select("source_message_id").eq("source_channel", source_channel).execute()
-        ids = [row["source_message_id"] for row in response.data if row.get("source_message_id") is not None]
+        import urllib.parse
+        url = f"{SUPABASE_URL}/rest/v1/jobs?select=source_message_id&source_channel=eq.{urllib.parse.quote(source_channel)}"
+        resp = http_requests.get(url, headers=_supabase_headers())
+        resp.raise_for_status()
+        data = resp.json()
+        ids = [row["source_message_id"] for row in data if row.get("source_message_id") is not None]
         return {"processed_ids": ids}
     except Exception as e:
         log.error("Failed to fetch processed ids", exc_info=True)
