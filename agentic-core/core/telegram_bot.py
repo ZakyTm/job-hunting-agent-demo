@@ -52,6 +52,8 @@ async def notify_new_match(job_data: dict) -> bool:
         email = job_data.get("contact_email", "N/A")
         company_intel = job_data.get("company_intel") or {}
 
+        source_channel = job_data.get("source_channel")
+
         # Build the notification message
         matched_str = ", ".join(matched[:5]) if matched else "N/A"
         talking_point = company_intel.get("talking_point", "")
@@ -60,6 +62,11 @@ async def notify_new_match(job_data: dict) -> bool:
         message = (
             f"🟢 *NEW MATCH: {_escape_md(title)}*\n"
             f"🏢 {_escape_md(company)} — Score: *{score}/10*\n"
+        )
+        if source_channel:
+            message += f"📡 *Source:* {_escape_md(source_channel)}\n"
+            
+        message += (
             f"\n"
             f"📋 *Reasoning:* {_escape_md(reasoning[:300])}\n"
             f"\n"

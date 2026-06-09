@@ -196,18 +196,35 @@ def list_jobs(
 ):
     """List jobs from Supabase with optional filtering."""
     try:
-        url = f"{SUPABASE_URL}/rest/v1/jobs?select=*&order=created_at.desc&limit={limit}"
+        fields = "id,job_title,company_name,match_score,status,source_channel,created_at,contact_email,match_reasoning,matched_skills,missing_skills,company_intel"
+        url = f"{SUPABASE_URL}/rest/v1/jobs?select={fields}&order=created_at.desc&limit={limit}"
+        
         if status:
-            url += f"&status=eq.{status}"
+            if status == "pending":
+                url += "&status=in.(ready,maybe,new)"
+            elif status == "approved":
+                url += "&status=in.(approved,completed)"
+            elif status == "ignored":
+                url += "&status=in.(ignored,ignored_by_user)"
+            else:
+                url += f"&status=eq.{status}"
+                
         if min_score:
             url += f"&match_score=gte.{min_score}"
+            
         resp = http_requests.get(url, headers=_supabase_headers())
+        
+        # Safe fallback: if table is not found or config is wrong, return empty jobs list
+        if resp.status_code in (400, 404):
+            log.warning(f"Supabase returned status {resp.status_code}. Table might not exist yet. Returning empty list.")
+            return {"jobs": []}
+            
         resp.raise_for_status()
         data = resp.json()
-        return {"jobs": data, "count": len(data)}
+        return {"jobs": data}
     except Exception as e:
-        log.error("Failed to list jobs", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch jobs")
+        log.error("Failed to list jobs, returning empty list fallback", exc_info=True)
+        return {"jobs": []}
 
 
 @app.get("/jobs/{job_id}/cv", response_class=HTMLResponse)

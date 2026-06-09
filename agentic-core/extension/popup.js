@@ -123,7 +123,10 @@ function renderJobs() {
 
       <div class="card-meta">
         <span class="status-label status-${job.status}">${escapeHtml(formattedStatus)}</span>
-        <span>${formatDate(job.created_at)}</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          ${job.source_channel ? `<span style="color: var(--text-muted); font-size: 11px;">📡 ${escapeHtml(job.source_channel)}</span>` : ""}
+          <span>${formatDate(job.created_at)}</span>
+        </div>
       </div>
 
       <div class="card-actions">

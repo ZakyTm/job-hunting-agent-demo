@@ -105,6 +105,7 @@ def saver_node(state) -> dict:
                 "matched_skills": state_dict.get("matched_skills", []),
                 "contact_email": state_dict.get("contact_email"),
                 "company_intel": state_dict.get("company_intel"),
+                "source_channel": state_dict.get("source_channel"),
             }
 
             # Run async notification in sync context
