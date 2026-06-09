@@ -27,6 +27,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+// Listen for messages from settings page
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "settings-updated") {
+    pollAndUpdatesBadge();
+    sendResponse({ success: true });
+  }
+  return true; // Keep channel open
+});
+
 // Set up Chrome alarm
 function setupAlarm() {
   chrome.alarms.create(ALARM_NAME, {
