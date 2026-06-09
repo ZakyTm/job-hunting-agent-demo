@@ -99,8 +99,8 @@ async def main(mode: str = "print", limit: int = 50, days: int = 7):
         processed_ids = set()
         if HAS_HTTPX and mode == "api":
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(f"{FASTAPI_URL.replace('/process-job', '/processed-ids')}?source_channel={channel}")
+                async with httpx.AsyncClient(timeout=10.0) as http_client:
+                    resp = await http_client.get(f"{FASTAPI_URL.replace('/process-job', '/processed-ids')}?source_channel={channel}")
                     if resp.status_code == 200:
                         data = resp.json()
                         processed_ids = set(data.get("processed_ids", []))

@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
       "supabaseAnonKey",
       "telegramBotToken",
       "telegramChatId",
+      "telegramChannels",
       "geminiApiKey"
     ],
     (result) => {
@@ -20,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("supabase-key").value = result.supabaseAnonKey || "";
       document.getElementById("telegram-token").value = result.telegramBotToken || "";
       document.getElementById("telegram-chat-id").value = result.telegramChatId || "";
+      document.getElementById("telegram-channels").value = result.telegramChannels || "@ITR213, @rcrdz1, @TechJobsOccean";
       document.getElementById("gemini-key").value = result.geminiApiKey || "";
     }
   );
@@ -41,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const supabaseAnonKey = document.getElementById("supabase-key").value.trim();
     const telegramBotToken = document.getElementById("telegram-token").value.trim();
     const telegramChatId = document.getElementById("telegram-chat-id").value.trim();
+    const telegramChannels = document.getElementById("telegram-channels").value.trim();
     const geminiApiKey = document.getElementById("gemini-key").value.trim();
 
     chrome.storage.local.set(
@@ -50,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
         supabaseAnonKey,
         telegramBotToken,
         telegramChatId,
+        telegramChannels,
         geminiApiKey
       },
       () => {

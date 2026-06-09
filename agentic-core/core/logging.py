@@ -14,9 +14,12 @@ class StructuredFormatter(logging.Formatter):
             "module": record.module,
         }
         # Attach any extra fields passed via extra={}
-        for key in ("job_id", "channel", "score", "pipeline_step", "duration_ms"):
-            if hasattr(record, key):
-                payload[key] = getattr(record, key)
+        for key, val in record.__dict__.items():
+            if key not in ("args", "asctime", "created", "exc_info", "exc_text", "filename",
+                           "funcName", "levelname", "levelno", "lineno", "module", "msecs",
+                           "message", "msg", "name", "pathname", "process", "processName",
+                           "relativeCreated", "stack_info", "thread", "threadName"):
+                payload[key] = val
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)

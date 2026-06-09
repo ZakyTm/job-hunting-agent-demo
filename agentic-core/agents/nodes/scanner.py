@@ -47,7 +47,7 @@ def scanner_node(state) -> dict:
 
     # Step 2: Gemini structured extraction
     llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-latest",
+        model="gemini-2.5-flash",
         google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
     structured_llm = llm.with_structured_output(ScannedJob)
