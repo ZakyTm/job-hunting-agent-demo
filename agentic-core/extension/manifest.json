@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "AI Job Hunter Agent UI",
+  "version": "1.0.0",
+  "description": "UI dashboard and job matching tracker for the AI Job Hunter Agent",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

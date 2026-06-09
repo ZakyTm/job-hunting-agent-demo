@@ -7,6 +7,8 @@ processes Telegram Bot HITL callbacks.
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -37,6 +39,14 @@ app = FastAPI(
     description="AI-powered job matching pipeline: Scanner → Matchmaker → routing → notification",
     version="0.4.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -198,6 +208,92 @@ def list_jobs(
     except Exception as e:
         log.error("Failed to list jobs", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch jobs")
+
+
+@app.get("/jobs/{job_id}/cv", response_class=HTMLResponse)
+def get_job_cv(job_id: str):
+    """
+    Fetch the tailored CV for a job and render it.
+    If the file exists on disk, read it; otherwise fallback to database content.
+    Returns rendered HTML.
+    """
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/jobs?id=eq.{job_id}&select=tailored_cv_path,tailored_cv_md,company_name,job_title"
+        resp = http_requests.get(url, headers=_supabase_headers())
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        row = data[0]
+        company = row.get("company_name", "Company")
+        title = row.get("job_title", "Position")
+        cv_path = row.get("tailored_cv_path")
+        cv_md = row.get("tailored_cv_md")
+
+        cv_content = None
+        if cv_path and os.path.exists(cv_path):
+            try:
+                with open(cv_path, "r", encoding="utf-8") as f:
+                    cv_content = f.read()
+            except Exception as e:
+                log.warning(f"Failed to read CV from path {cv_path}: {e}")
+
+        if not cv_content:
+            cv_content = cv_md
+
+        if not cv_content:
+            raise HTTPException(status_code=404, detail="Tailored CV not generated or found")
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Tailored CV - {company} - {title}</title>
+            <meta charset="utf-8">
+            <style>
+                body {{
+                    background-color: #121212;
+                    color: #e0e0e0;
+                    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                    line-height: 1.6;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 40px 20px;
+                }}
+                pre {{
+                    background-color: #1e1e1e;
+                    border: 1px solid #333;
+                    border-radius: 6px;
+                    padding: 20px;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                    font-family: 'Courier New', Courier, monospace;
+                    font-size: 14px;
+                    color: #10B981;
+                }}
+                h1 {{
+                    color: #10B981;
+                    border-bottom: 2px solid #333;
+                    padding-bottom: 10px;
+                }}
+                h3 {{
+                    color: #a0a0a0;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Tailored CV for {company}</h1>
+            <h3>Role: {title}</h3>
+            <pre>{cv_content}</pre>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        log.error("Failed to render CV", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to render CV: {str(e)}")
+
 
 
 # ---------------------------------------------------------------------------
